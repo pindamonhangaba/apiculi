@@ -1,0 +1,60 @@
+package endpoint
+
+import (
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/pkg/errors"
+)
+
+func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next Endpoint[C, P, Q, B, D]) (string, string, fiber.Handler) {
+
+	fillOpenAPIRoute[C, P, Q, B, D](p, d)
+
+	return string(p.verb), p.path, func(c *fiber.Ctx) error {
+		var cc C
+		user, ok := c.Locals("user").(*jwt.Token)
+		if ok {
+			claims, ok1 := user.Claims.(jwt.MapClaims)
+			if ok1 {
+				var err error
+				cc, err = mapToStruct(claims, *new(C))
+				if err != nil {
+					return errors.Wrap(err, "raw claims")
+				}
+			}
+		}
+
+		m := map[string]string{}
+		for _, p := range c.Route().Params {
+			m[p] = c.Params(p)
+		}
+		p, err := mapToStruct(m, *new(P))
+		if err != nil {
+			return errors.Wrap(err, "claims")
+		}
+
+		q := new(Q)
+		err = c.QueryParser(q)
+		if err != nil {
+			return errors.Wrap(err, "query")
+		}
+
+		b := new(B)
+		if len(c.Body()) > 0 {
+			err = c.BodyParser(b)
+			if err != nil {
+				return errors.Wrap(err, "body")
+			}
+		}
+
+		input := EndpointInput[C, P, Q, B]{
+			Claims: cc,
+			Params: p,
+			Query:  *q,
+			Body:   *b,
+		}
+
+		r := next(input)
+		return c.JSON(r)
+	}
+}

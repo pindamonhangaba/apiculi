@@ -141,7 +141,7 @@ func makeNameFromRoute(s string) string {
 	return "unnamed" + sufx
 }
 
-type Endpoint[C, P, Q, B any, D dataer] func(EndpointInput[C, P, Q, B]) DataResponse[D]
+type Endpoint[C, P, Q, B any, D dataer] func(EndpointInput[C, P, Q, B]) (DataResponse[D], error)
 
 type OpenAPIDescriber func(func(string, string, *openapi3.T))
 

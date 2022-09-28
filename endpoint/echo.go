@@ -56,7 +56,10 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next End
 			Body:   *b,
 		}
 
-		r := next(input)
+		r, err := next(input)
+		if err != nil {
+			return err
+		}
 		return c.JSON(http.StatusOK, r)
 	}
 }

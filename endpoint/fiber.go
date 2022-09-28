@@ -54,7 +54,10 @@ func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next En
 			Body:   *b,
 		}
 
-		r := next(input)
+		r, err := next(input)
+		if err != nil {
+			return err
+		}
 		return c.JSON(r)
 	}
 }

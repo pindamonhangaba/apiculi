@@ -35,7 +35,7 @@ func main() {
 			* Nice list
 			* Description ~goes here~
 		`),
-		func(in endpointInput) endpoint.DataResponse[endpoint.SingleItemData[endpointResponse]] {
+		func(in endpointInput) (endpoint.DataResponse[endpoint.SingleItemData[endpointResponse]], error) {
 			return endpoint.DataResponse[endpoint.SingleItemData[endpointResponse]]{
 				Context: in.Query.Context,
 				Data: endpoint.SingleItemData[endpointResponse]{
@@ -46,7 +46,7 @@ func main() {
 						CreatedResourceName: in.Body.ResourceName,
 					},
 				},
-			}
+			}, nil
 		},
 	))
 

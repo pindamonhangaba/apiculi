@@ -35,10 +35,10 @@ func TestFiber(t *testing.T) {
 			* Nice list
 			* Description ~is here~
 		`),
-		func(in TT) DataResponse[SingleItemData[struct {
+		func(in TT) (DataResponse[SingleItemData[struct {
 			A string `json:"a"`
 			B string `json:"b"`
-		}]] {
+		}]], error) {
 			return DataResponse[SingleItemData[struct {
 				A string `json:"a"`
 				B string `json:"b"`
@@ -53,7 +53,7 @@ func TestFiber(t *testing.T) {
 					},
 					Item: in.Body,
 				},
-			}
+			}, nil
 		},
 	))
 }

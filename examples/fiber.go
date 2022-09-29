@@ -31,7 +31,7 @@ func main() {
 
 	app.Add(endpoint.Fiber(
 		endpoint.Post("/api/endpoint/{id}"),
-		oapi.Describe("Create one resource", `
+		oapi.Route("Create one resource", `
 			* Nice list
 			* Description ~goes here~
 		`),

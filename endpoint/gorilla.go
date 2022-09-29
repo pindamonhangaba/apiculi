@@ -38,7 +38,7 @@ func writeJSON[T any](w http.ResponseWriter, statusCode int, data T) {
 	w.Write(b)
 }
 
-func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next Endpoint[C, P, Q, B, D]) (string, string, http.HandlerFunc) {
+func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, next Endpoint[C, P, Q, B, D]) (string, string, http.HandlerFunc) {
 
 	fillOpenAPIRoute[C, P, Q, B, D](p, d)
 

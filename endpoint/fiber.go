@@ -6,9 +6,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next Endpoint[C, P, Q, B, D]) (string, string, fiber.Handler) {
+func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, next Endpoint[C, P, Q, B, D]) (string, string, fiber.Handler) {
 
-	fillOpenAPIRoute[C, P, Q, B, D](p, d)
+	fillOpenAPIRoute[C, P, Q, B, D](endpointPath{
+		verb: p.verb,
+		path: routerPathToOpenAPIPath(p.path),
+	}, d)
 
 	return string(p.verb), p.path, func(c *fiber.Ctx) error {
 		var cc C

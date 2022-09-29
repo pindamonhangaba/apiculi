@@ -12,9 +12,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber, next Endpoint[C, P, Q, B, D]) (string, string, echo.HandlerFunc) {
+func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, next Endpoint[C, P, Q, B, D]) (string, string, echo.HandlerFunc) {
 
-	fillOpenAPIRoute[C, P, Q, B, D](p, d)
+	fillOpenAPIRoute[C, P, Q, B, D](endpointPath{
+		verb: p.verb,
+		path: routerPathToOpenAPIPath(p.path),
+	}, d)
 
 	return string(p.verb), p.path, func(c echo.Context) error {
 		user := c.Get("user").(*jwt.Token)

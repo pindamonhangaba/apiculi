@@ -1,15 +1,14 @@
 package endpoint
 
 import (
-	"strings"
+	"encoding/json"
 	"testing"
 
-	"github.com/pindamonhangaba/apiculi/quick_schema"
-
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/pindamonhangaba/apiculi/quick_schema"
+	diff "github.com/yudai/gojsondiff"
+	"github.com/yudai/gojsondiff/formatter"
 
-	"github.com/andreyvit/diff"
-	"github.com/ghodss/yaml"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -23,6 +22,31 @@ type TT = EndpointInput[struct {
 	B string `json:"b"`
 }]
 
+func diffJSON(a, b []byte) (string, error) {
+	differ := diff.New()
+	d, err := differ.Compare(a, b)
+	if err != nil {
+		return "", err
+	}
+	if d.Modified() {
+		var aJson map[string]interface{}
+		json.Unmarshal(a, &aJson)
+
+		config := formatter.AsciiFormatterConfig{
+			ShowArrayIndex: true,
+			Coloring:       true,
+		}
+
+		formatter := formatter.NewAsciiFormatter(aJson, config)
+		diffString, err := formatter.Format(d)
+		if err != nil {
+			return "", err
+		}
+		return diffString, nil
+	}
+	return "", nil
+}
+
 func TestFiber(t *testing.T) {
 
 	oapi := NewOpenAPI("Endpoint Docs", "v1.0.1")
@@ -31,7 +55,7 @@ func TestFiber(t *testing.T) {
 
 	app.Add(Fiber(
 		Get("/api/endpoint/:id"),
-		oapi.Describe("List one resource", `
+		oapi.Route("List one resource", `
 			* Nice list
 			* Description ~is here~
 		`),
@@ -60,7 +84,8 @@ func TestFiber(t *testing.T) {
 
 func TestParams(t *testing.T) {
 
-	expectedYAML := "/query-param-test:\n  post:\n    parameters:\n    - in: query\n      name: AnotherValue\n      required: true\n      schema:\n        items:\n          format: int\n          type: number\n        title: AnotherValue\n        type: array\n    - in: query\n      name: Props\n      required: true\n      schema:\n        format: testParam\n        properties:\n          ParamProp:\n            format: string\n            title: ParamProp\n            type: string\n        required:\n        - ParamProp\n        title: Props\n        type: object\n    - in: query\n      name: SomeValue\n      required: true\n      schema:\n        format: string\n        title: SomeValue\n        type: string\n    responses: null"
+	expectedJSON := []byte(`{"/query-param-test":{"post":{"parameters":[{"in":"query","name":"SomeValue","required":true,"schema":{"format":"string","title":"SomeValue","type":"string"}},{"in":"query","name":"AnotherValue","required":true,"schema":{"items":{"format":"int","type":"number"},"title":"AnotherValue","type":"array"}},{"in":"query","name":"Props","required":true,"schema":{"format":"testParam","properties":{"ParamProp":{"format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"Props","type":"object"}}],"responses":null}}}`)
+
 	type testParam struct {
 		ParamProp string
 	}
@@ -87,19 +112,22 @@ func TestParams(t *testing.T) {
 			},
 		},
 	}
-	outputYAML, err := yaml.Marshal(paths)
+	j, err := json.Marshal(paths)
 	if err != nil {
 		t.Error(err)
 	}
-	if a, e := strings.TrimSpace(string(outputYAML)), strings.TrimSpace(expectedYAML); a != e {
-		t.Errorf("result not as expected:\n%v", diff.LineDiff(e, a))
+	d, err := diffJSON(expectedJSON, j)
+	if err != nil {
+		t.Error(err)
 	}
-	t.Log(string(outputYAML))
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", d)
+	}
 }
 
 func TestBuildSchemaRepo(t *testing.T) {
 
-	expectedYAML := "schemas:\n  endpointparam:\n    format: param\n    properties:\n      AnotherValue:\n        items:\n          format: int\n          type: number\n        title: AnotherValue\n        type: array\n      Props:\n        format: testParam\n        properties:\n          ParamProp:\n            format: string\n            title: ParamProp\n            type: string\n        required:\n        - ParamProp\n        title: Props\n        type: object\n      SomeValue:\n        format: string\n        title: SomeValue\n        type: string\n    required:\n    - SomeValue\n    - AnotherValue\n    - Props\n    type: object\n  endpointtestParam:\n    format: testParam\n    properties:\n      ParamProp:\n        format: string\n        title: ParamProp\n        type: string\n    required:\n    - ParamProp\n    title: Props\n    type: object"
+	expectedJSON := []byte(`{"schemas":{"endpointparam":{"format":"param","properties":{"AnotherValue":{"items":{"format":"int","type":"number"},"title":"AnotherValue","type":"array"},"Props":{"format":"testParam","properties":{"ParamProp":{"format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"Props","type":"object"},"SomeValue":{"format":"string","title":"SomeValue","type":"string"}},"required":["SomeValue","AnotherValue","Props"],"type":"object"},"endpointtestParam":{"format":"testParam","properties":{"ParamProp":{"format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"Props","type":"object"}}}`)
 
 	type testParam struct {
 		ParamProp string
@@ -110,9 +138,9 @@ func TestBuildSchemaRepo(t *testing.T) {
 		Props        testParam
 	}
 	n := quick_schema.GetSchema[param]()
-	_, repo := buildSchemaRepo(*n)
+	repo := buildSchemaRepo(*n)
 	schemass := map[string]*openapi3.SchemaRef{}
-	for name, schema := range repo {
+	for name, schema := range repo.Repo {
 		schemass[name] = &openapi3.SchemaRef{
 			Value: schema,
 		}
@@ -120,18 +148,22 @@ func TestBuildSchemaRepo(t *testing.T) {
 	components := openapi3.Components{
 		Schemas: schemass,
 	}
-	outputYAML, err := yaml.Marshal(components)
+	j, err := components.MarshalJSON()
 	if err != nil {
 		t.Error(err)
 	}
-	if a, e := strings.TrimSpace(string(outputYAML)), strings.TrimSpace(expectedYAML); a != e {
-		t.Errorf("result not as expected:\n%v", diff.LineDiff(e, a))
+	d, err := diffJSON(expectedJSON, j)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", d)
 	}
 }
+
 func TestFillOpenAPIRoute(t *testing.T) {
 
-	expectedYAML := "components:\n  schemas:\n    endpointDataDetail:\n      format: DataDetail\n      properties:\n        kind:\n          format: string\n          title: kind\n          type: string\n        lang:\n          format: string\n          title: lang\n          type: string\n      required:\n      - kind\n      - lang\n      title: DataDetail\n      type: object\n    endpointDataResponse[endpoint.SingleItemData[string]]:\n      format: DataResponse[endpoint.SingleItemData[string]]\n      properties:\n        context:\n          format: string\n          title: context\n          type: string\n        data:\n          format: SingleItemData[string]\n          properties:\n            DataDetail:\n              format: DataDetail\n              properties:\n                kind:\n                  format: string\n                  title: kind\n                  type: string\n                lang:\n                  format: string\n                  title: lang\n                  type: string\n              required:\n              - kind\n              - lang\n              title: DataDetail\n              type: object\n            item:\n              format: string\n              title: item\n              type: string\n          required:\n          - DataDetail\n          - item\n          title: data\n          type: object\n      required:\n      - context\n      - data\n      type: object\n    endpointSingleItemData[string]:\n      format: SingleItemData[string]\n      properties:\n        DataDetail:\n          format: DataDetail\n          properties:\n            kind:\n              format: string\n              title: kind\n              type: string\n            lang:\n              format: string\n              title: lang\n              type: string\n          required:\n          - kind\n          - lang\n          title: DataDetail\n          type: object\n        item:\n          format: string\n          title: item\n          type: string\n      required:\n      - DataDetail\n      - item\n      title: data\n      type: object\n    endpointbody:\n      format: body\n      properties:\n        Content:\n          format: string\n          title: Content\n          type: string\n      required:\n      - Content\n      type: object\ninfo:\n  title: Endpoint Docs\n  version: v1.0.1\nopenapi: \"3.0\"\npaths:\n  /api/endpoint/{ParamProp}:\n    get:\n      parameters:\n      - in: path\n        name: ParamProp\n        required: true\n        schema:\n          format: string\n          title: ParamProp\n          type: string\n      - in: query\n        name: SomeValue\n        required: true\n        schema:\n          format: string\n          title: SomeValue\n          type: string\n      - in: query\n        name: AnotherValue\n        required: true\n        schema:\n          items:\n            format: int\n            type: number\n          title: AnotherValue\n          type: array\n      - in: query\n        name: Props\n        required: true\n        schema:\n          format: testParam\n          properties:\n            ParamProp:\n              format: string\n              title: ParamProp\n              type: string\n          required:\n          - ParamProp\n          title: Props\n          type: object\n      requestBody:\n        content:\n          application/json:\n            schema:\n              format: body\n              properties:\n                Content:\n                  format: string\n                  title: Content\n                  type: string\n              required:\n              - Content\n              type: object\n        description: Request data\n      responses:\n        \"200\":\n          content:\n            application/json:\n              schema:\n                format: DataResponse[endpoint.SingleItemData[string]]\n                properties:\n                  context:\n                    format: string\n                    title: context\n                    type: string\n                  data:\n                    format: SingleItemData[string]\n                    properties:\n                      DataDetail:\n                        format: DataDetail\n                        properties:\n                          kind:\n                            format: string\n                            title: kind\n                            type: string\n                          lang:\n                            format: string\n                            title: lang\n                            type: string\n                        required:\n                        - kind\n                        - lang\n                        title: DataDetail\n                        type: object\n                      item:\n                        format: string\n                        title: item\n                        type: string\n                    required:\n                    - DataDetail\n                    - item\n                    title: data\n                    type: object\n                required:\n                - context\n                - data\n                type: object"
-
+	expectedJSON := []byte(`{"components":{"schemas":{"endpointDataDetail":{"format":"DataDetail","properties":{"kind":{"format":"string","title":"kind","type":"string"},"lang":{"format":"string","title":"lang","type":"string"}},"required":["kind","lang"],"title":"DataDetail","type":"object"},"endpointDataResponse[endpoint.SingleItemData[string]]":{"format":"DataResponse[endpoint.SingleItemData[string]]","properties":{"context":{"format":"string","title":"context","type":"string"},"data":{"format":"SingleItemData[string]","properties":{"DataDetail":{"format":"DataDetail","properties":{"kind":{"format":"string","title":"kind","type":"string"},"lang":{"format":"string","title":"lang","type":"string"}},"required":["kind","lang"],"title":"DataDetail","type":"object"},"item":{"format":"string","title":"item","type":"string"}},"required":["DataDetail","item"],"title":"data","type":"object"}},"required":["context","data"],"type":"object"},"endpointSingleItemData[string]":{"format":"SingleItemData[string]","properties":{"DataDetail":{"format":"DataDetail","properties":{"kind":{"format":"string","title":"kind","type":"string"},"lang":{"format":"string","title":"lang","type":"string"}},"required":["kind","lang"],"title":"DataDetail","type":"object"},"item":{"format":"string","title":"item","type":"string"}},"required":["DataDetail","item"],"title":"data","type":"object"},"endpointbody":{"format":"body","properties":{"Content":{"format":"string","title":"Content","type":"string"}},"required":["Content"],"type":"object"}}},"info":{"title":"Endpoint Docs","version":"v1.0.1"},"openapi":"3.0","paths":{"/api/endpoint/{ParamProp}":{"get":{"parameters":[{"in":"path","name":"ParamProp","required":true,"schema":{"format":"string","title":"ParamProp","type":"string"}},{"in":"query","name":"Props","required":true,"schema":{"format":"testParam","properties":{"ParamProp":{"format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"Props","type":"object"}},{"in":"query","name":"SomeValue","required":true,"schema":{"format":"string","title":"SomeValue","type":"string"}},{"in":"query","name":"AnotherValue","required":true,"schema":{"items":{"format":"int","type":"number"},"title":"AnotherValue","type":"array"}}],"requestBody":{"content":{"application/json":{"schema":{"format":"body","properties":{"Content":{"format":"string","title":"Content","type":"string"}},"required":["Content"],"type":"object"}}},"description":"Request data"},"responses":{"200":{"content":{"application/json":{"schema":{"format":"DataResponse[endpoint.SingleItemData[string]]","properties":{"context":{"format":"string","title":"context","type":"string"},"data":{"format":"SingleItemData[string]","properties":{"DataDetail":{"format":"DataDetail","properties":{"kind":{"format":"string","title":"kind","type":"string"},"lang":{"format":"string","title":"lang","type":"string"}},"required":["kind","lang"],"title":"DataDetail","type":"object"},"item":{"format":"string","title":"item","type":"string"}},"required":["DataDetail","item"],"title":"data","type":"object"}},"required":["context","data"],"type":"object"}}}}}}}}}`)
 	oapi := NewOpenAPI("Endpoint Docs", "v1.0.1")
 	type claimed struct {
 		UserID string
@@ -150,13 +182,17 @@ func TestFillOpenAPIRoute(t *testing.T) {
 	fillOpenAPIRoute[claimed, testParam, param, body, SingleItemData[string]](endpointPath{
 		path: "/api/endpoint/{ParamProp}",
 		verb: GET,
-	}, oapi.Describe("title", "description"))
+	}, oapi.Route("title", "description"))
 
-	outputYAML, err := yaml.Marshal(oapi.T())
+	j, err := oapi.T().MarshalJSON()
 	if err != nil {
 		t.Error(err)
 	}
-	if a, e := strings.TrimSpace(string(outputYAML)), strings.TrimSpace(expectedYAML); a != e {
-		t.Errorf("result not as expected:\n%v", diff.LineDiff(e, a))
+	d, err := diffJSON(expectedJSON, j)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", "d")
 	}
 }

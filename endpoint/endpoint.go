@@ -16,6 +16,10 @@ import (
 // Based on Google JSONC styleguide
 // https://google.github.io/styleguide/jsoncstyleguide.xml
 
+type Schemaer interface {
+	Schema() SchemaRepo
+}
+
 type errorResponse struct {
 	Error generalError `json:"error"`
 }
@@ -67,7 +71,7 @@ type CollectionDetail struct {
 	TotalPages int64 `json:"totalPages" example:"10"`
 }
 
-func (d DataDetail) Data() {}
+func (d DataDetail) data() {}
 
 type SingleItemData[T any] struct {
 	DataDetail
@@ -75,6 +79,34 @@ type SingleItemData[T any] struct {
 }
 
 func (d SingleItemData[T]) data() {}
+
+func (d SingleItemData[T]) Schema() SchemaRepo {
+	s := quick_schema.GetSchema[SingleItemData[T]]()
+	r := buildSchemaRepo(*s)
+
+	itemSchema := r.Repo[r.Start.Properties["item"].Value.Title]
+
+	resp := new(T)
+	if c, ok := interface{}(resp).(Schemaer); ok {
+		s := c.Schema()
+		for k, v := range s.Repo {
+			if _, ok := r.Repo[k]; !ok {
+				r.Repo[k] = v
+			}
+		}
+		itemSchema = s.Start
+	}
+
+	r.Start.Properties["item"] = openapi3.NewSchemaRef(
+		"",
+		openapi3.NewAllOfSchema(openapi3.NewObjectSchema(), itemSchema),
+	)
+
+	return SchemaRepo{
+		Repo:  r.Repo,
+		Start: r.Start,
+	}
+}
 
 type CollectionItemData[T any] struct {
 	DataDetail
@@ -104,22 +136,6 @@ func mapToStruct[K any, M ~map[string]K, S any](in M, out S) (S, error) {
 	return out, err
 }
 
-type RouteDescription struct {
-	Summary     string
-	Description string
-}
-
-func describe(a, b string) RouteDescription {
-	return RouteDescription{
-		Summary:     a,
-		Description: b,
-	}
-}
-
-func route(r string) string {
-	return r
-}
-
 var nonWordRgx = regexp.MustCompile(`\W`)
 var underlinesRgx = regexp.MustCompile(`_`)
 
@@ -143,15 +159,41 @@ func makeNameFromRoute(s string) string {
 
 type Endpoint[C, P, Q, B any, D dataer] func(EndpointInput[C, P, Q, B]) (DataResponse[D], error)
 
-type OpenAPIDescriber func(func(string, string, *openapi3.T))
+type RouteDescription struct {
+	Title       string
+	Description string
+	Tag         string
+}
+
+type OpenAPIRouteDescriber func(func(RouteDescription, *openapi3.T))
 
 type OpenAPI struct {
 	t openapi3.T
 }
 
-func (op *OpenAPI) Describe(title, description string) OpenAPIDescriber {
-	return func(f func(string, string, *openapi3.T)) {
-		f(title, description, &op.t)
+func (op *OpenAPI) Route(title, description string) OpenAPIRouteDescriber {
+	return func(f func(RouteDescription, *openapi3.T)) {
+		f(RouteDescription{
+			Title:       title,
+			Description: description,
+		}, &op.t)
+	}
+}
+func (op *OpenAPI) RouteGroup(name string, description ...string) OpenAPIRouteGroup {
+	t := op.t.Tags.Get(name)
+	if t != nil {
+		panic("tag already exists: " + name)
+	}
+	tag := &openapi3.Tag{
+		Name: name,
+	}
+	if len(description) > 0 {
+		tag.Description = strings.Join(description, " ")
+	}
+	op.t.Tags = append(op.t.Tags, tag)
+	return OpenAPIRouteGroup{
+		op:    op,
+		group: name,
 	}
 }
 
@@ -159,14 +201,28 @@ func (op *OpenAPI) T() *openapi3.T {
 	return &op.t
 }
 
+func (op *OpenAPI) Describe(description string) {
+	op.t.Info.Description = description
+}
+
 func (op *OpenAPI) AddServer(url, description string) *openapi3.T {
-	if op.t.Servers == nil {
-		op.t.Servers = openapi3.Servers{}
+	if op.t.Components.SecuritySchemes == nil {
+		op.t.Components.SecuritySchemes = openapi3.SecuritySchemes{}
 	}
 	op.t.Servers = append(op.t.Servers, &openapi3.Server{
 		URL:         url,
 		Description: description,
 	})
+	return &op.t
+}
+
+func (op *OpenAPI) AddJWTBearerAuth(name string) *openapi3.T {
+	if op.t.Servers == nil {
+		op.t.Servers = openapi3.Servers{}
+	}
+	op.t.Components.SecuritySchemes[name] = &openapi3.SecuritySchemeRef{
+		Value: openapi3.NewJWTSecurityScheme(),
+	}
 	return &op.t
 }
 
@@ -179,6 +235,21 @@ func NewOpenAPI(title, version string) OpenAPI {
 				Version: version,
 			},
 		},
+	}
+}
+
+type OpenAPIRouteGroup struct {
+	op    *OpenAPI
+	group string
+}
+
+func (g *OpenAPIRouteGroup) Route(title, description string) OpenAPIRouteDescriber {
+	return func(f func(RouteDescription, *openapi3.T)) {
+		f(RouteDescription{
+			Title:       title,
+			Description: description,
+			Tag:         g.group,
+		}, &g.op.t)
 	}
 }
 
@@ -215,8 +286,8 @@ func Delete(path string) endpointPath {
 	return endpointPath{DELETE, path}
 }
 
-func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescriber) {
-	d(func(tit, desc string, swag *openapi3.T) {
+func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber) {
+	d(func(rdesc RouteDescription, swag *openapi3.T) {
 		prepo, err := makeParams[P]("path")
 		if err != nil {
 			panic(errors.Wrap(err, "bad api data"))
@@ -241,30 +312,39 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescrib
 		}
 
 		bodyTypeNodeSchema := quick_schema.GetSchema[B]()
-		bodySchema, bodySchemarepo := buildSchemaRepo(*bodyTypeNodeSchema)
+		bodyRepo := buildSchemaRepo(*bodyTypeNodeSchema)
 		requestBody := &openapi3.RequestBody{
 			Description: "Request data",
-			Content:     openapi3.NewContentWithJSONSchema(bodySchema),
+			Content:     openapi3.NewContentWithJSONSchema(bodyRepo.Start),
 		}
 
 		responseNodeSchema := quick_schema.GetSchema[DataResponse[D]]()
-		responseSchema, responseSchemarepo := buildSchemaRepo(*responseNodeSchema)
+		responseRepo := buildSchemaRepo(*responseNodeSchema)
+		resp := new(D)
+		if c, ok := interface{}(resp).(Schemaer); ok {
+			responseRepo = c.Schema()
+		}
+		if responseRepo.Start == nil {
+			panic(errors.New("empty schema for response"))
+		}
+		// remove root schema ref name
+		responseRepo.Start.Format = ""
 		response := &openapi3.Response{
 			Description: nil,
-			Content:     openapi3.NewContentWithJSONSchema(responseSchema),
+			Content:     openapi3.NewContentWithJSONSchema(responseRepo.Start),
 		}
 
 		if swag.Components.Schemas == nil {
 			swag.Components.Schemas = openapi3.Schemas{}
 		}
 
-		for n, val := range bodySchemarepo {
+		for n, val := range bodyRepo.Repo {
 			if val == nil {
 				panic("unexpected nil bodySchema")
 			}
 			swag.Components.Schemas[n] = openapi3.NewSchemaRef("", val)
 		}
-		for n, val := range responseSchemarepo {
+		for n, val := range responseRepo.Repo {
 			if val == nil {
 				panic("unexpected nil responseSchema")
 			}
@@ -272,7 +352,9 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescrib
 		}
 
 		op := &openapi3.Operation{
-			Parameters: params,
+			Summary:     rdesc.Title,
+			Description: rdesc.Description,
+			Parameters:  params,
 			RequestBody: &openapi3.RequestBodyRef{
 				//Ref:   "#/components/requestBodies/someRequestBody",
 				Value: requestBody,
@@ -283,6 +365,10 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIDescrib
 					Value: response,
 				},
 			},
+			Security: openapi3.NewSecurityRequirements().With(openapi3.NewSecurityRequirement().Authenticate("bearerAuth", "something else")),
+		}
+		if len(rdesc.Tag) > 0 {
+			op.Tags = []string{rdesc.Tag}
 		}
 		pitem := &openapi3.PathItem{}
 		if swag.Paths == nil {
@@ -312,10 +398,12 @@ func makeParams[T any](in string) (map[string]*openapi3.ParameterRef, error) {
 	if n == nil {
 		return nil, nil
 	}
-	sch, repo := buildSchemaRepo(*n)
+	r := buildSchemaRepo(*n)
+	sch := r.Start
+	repo := r.Repo
 
 	if sch.Type != "object" {
-		return nil, errors.New("parameter's type must be a object")
+		return nil, errors.Errorf("parameter's type must be a object, is \"%s\"", sch.Type)
 	}
 
 	params := []*openapi3.Parameter{}
@@ -330,7 +418,7 @@ func makeParams[T any](in string) (map[string]*openapi3.ParameterRef, error) {
 			Schema:      p,
 		}
 		for n, r := range repo {
-			if n == p.Value.Title {
+			if len(strings.TrimSpace(n)) > 0 && n == p.Value.Title {
 				pram.Schema = &openapi3.SchemaRef{
 					Ref:   "#/components/schemas/" + n,
 					Value: r,
@@ -350,25 +438,26 @@ func makeParams[T any](in string) (map[string]*openapi3.ParameterRef, error) {
 	return prepo, nil
 }
 
-func makeRefableName(pkg, typ string) string {
-	s := strings.Split(pkg, "/")
-	return strings.ReplaceAll(s[len(s)-1], ".", "_") + typ
+func makeRefableName(pkg, typ, name string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(pkg, "/", "_"), ".", "_") + name
 }
 
-func buildSchemaRepo(n quick_schema.Node) (*openapi3.Schema, map[string]*openapi3.Schema) {
+func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
 	repo := map[string]*openapi3.Schema{}
 	var schemafy func(n quick_schema.Node) *openapi3.Schema
 	schemafy = func(n quick_schema.Node) *openapi3.Schema {
-		nname := makeRefableName(n.Package, n.Type)
+		nname := makeRefableName(n.Package, n.Type, n.Name)
 		s := openapi3.NewSchema()
-		s.Title = n.Name
+		s.Title = nname
 		s.Type = n.Format
 		s.Format = n.Type
+		s.Example = n.Example
+		s.Description = n.Description
 
 		if s.Type == "object" {
 			s.Properties = make(openapi3.Schemas)
 			for _, p := range n.Children {
-				pname := "#/components/schemas/" + makeRefableName(p.Package, p.Type)
+				pname := "#/components/schemas/" + makeRefableName(p.Package, p.Type, p.Name)
 				ps := schemafy(p)
 				if p.Format == "pointer" && len(p.Children) == 1 {
 					ps = schemafy(p.Children[0])
@@ -389,7 +478,8 @@ func buildSchemaRepo(n quick_schema.Node) (*openapi3.Schema, map[string]*openapi
 			ps := schemafy(n.Children[0])
 			name := ""
 			if ps.Type == "object" || ps.Type == "array" {
-				name = "#/components/schemas/" + makeRefableName(n.Children[0].Package, n.Children[0].Type)
+				name = "#/components/schemas/" +
+					makeRefableName(n.Children[0].Package, n.Children[0].Type, n.Children[0].Name)
 			}
 			s.Items = openapi3.NewSchemaRef(name, ps)
 		}
@@ -397,7 +487,10 @@ func buildSchemaRepo(n quick_schema.Node) (*openapi3.Schema, map[string]*openapi
 		return s
 	}
 	sch := schemafy(n)
-	return sch, repo
+	return SchemaRepo{
+		Start: sch,
+		Repo:  repo,
+	}
 }
 
 func has[T comparable](hs []T, n T) bool {
@@ -414,4 +507,19 @@ func validatePathParamVar(path, param string) error {
 		return errors.Errorf("declared path parameter \"%s\" needs to be defined as a path parameter in \"%s\" ", param, path)
 	}
 	return nil
+}
+
+// routerPathToOpenAPIPath transforms route params into expected format: :param -> {param}
+// only handles simple ":etc" params
+// for extended options see: https://docs.gofiber.io/guide/routing#parameters
+func routerPathToOpenAPIPath(path string) string {
+	re := regexp.MustCompile(`(?m)[^\\](:[\w]+)`)
+	matches := re.FindStringSubmatch(path)
+	if len(matches) > 1 {
+		matches = matches[1:]
+	}
+	for _, m := range matches {
+		path = strings.Replace(path, m, "{"+strings.ReplaceAll(m, ":", "")+"}", 1)
+	}
+	return path
 }

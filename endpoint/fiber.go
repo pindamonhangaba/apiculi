@@ -14,6 +14,13 @@ func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, ne
 	}, d)
 
 	return string(p.verb), p.path, func(c *fiber.Ctx) error {
+
+		switch string(c.Request().Header.ContentType()) {
+		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
+		default:
+			return errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded" `)
+		}
+
 		var cc C
 		user, ok := c.Locals("user").(*jwt.Token)
 		if ok {

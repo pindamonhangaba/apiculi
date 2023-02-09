@@ -313,9 +313,13 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 
 		bodyTypeNodeSchema := quick_schema.GetSchema[B]()
 		bodyRepo := buildSchemaRepo(*bodyTypeNodeSchema)
+
+		reqContent := openapi3.NewContentWithJSONSchema(bodyRepo.Start)
+		reqContent["application/x-www-form-urlencoded"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
+		reqContent["multipart/form-data"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
 		requestBody := &openapi3.RequestBody{
 			Description: "Request data",
-			Content:     openapi3.NewContentWithJSONSchema(bodyRepo.Start),
+			Content:     reqContent,
 		}
 
 		responseNodeSchema := quick_schema.GetSchema[DataResponse[D]]()
@@ -329,6 +333,7 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 		}
 		// remove root schema ref name
 		responseRepo.Start.Format = ""
+
 		response := &openapi3.Response{
 			Description: nil,
 			Content:     openapi3.NewContentWithJSONSchema(responseRepo.Start),

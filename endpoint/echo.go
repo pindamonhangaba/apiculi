@@ -20,6 +20,12 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, nex
 	}, d)
 
 	return string(p.verb), p.path, func(c echo.Context) error {
+		switch c.Request().Header.Get("Content-Type") {
+		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
+		default:
+			return errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`)
+		}
+
 		user := c.Get("user").(*jwt.Token)
 		cc, _ := user.Claims.(C)
 

@@ -83,24 +83,26 @@ func (d SingleItemData[T]) data() {}
 func (d SingleItemData[T]) Schema() SchemaRepo {
 	s := quick_schema.GetSchema[SingleItemData[T]]()
 	r := buildSchemaRepo(*s)
+	// don't do anything if "item" type is something like "any"
+	if r.Start.Properties["item"] != nil {
+		itemSchema := r.Repo[r.Start.Properties["item"].Value.Title]
 
-	itemSchema := r.Repo[r.Start.Properties["item"].Value.Title]
-
-	resp := new(T)
-	if c, ok := interface{}(resp).(Schemaer); ok {
-		s := c.Schema()
-		for k, v := range s.Repo {
-			if _, ok := r.Repo[k]; !ok {
-				r.Repo[k] = v
+		resp := new(T)
+		if c, ok := interface{}(resp).(Schemaer); ok {
+			s := c.Schema()
+			for k, v := range s.Repo {
+				if _, ok := r.Repo[k]; !ok {
+					r.Repo[k] = v
+				}
 			}
+			itemSchema = s.Start
 		}
-		itemSchema = s.Start
-	}
 
-	r.Start.Properties["item"] = openapi3.NewSchemaRef(
-		"",
-		openapi3.NewAllOfSchema(openapi3.NewObjectSchema(), itemSchema),
-	)
+		r.Start.Properties["item"] = openapi3.NewSchemaRef(
+			"",
+			openapi3.NewAllOfSchema(openapi3.NewObjectSchema(), itemSchema),
+		)
+	}
 
 	return SchemaRepo{
 		Repo:  r.Repo,
@@ -158,6 +160,7 @@ func makeNameFromRoute(s string) string {
 }
 
 type Endpoint[C, P, Q, B any, D dataer] func(EndpointInput[C, P, Q, B]) (DataResponse[D], error)
+type EndpointWithContext[C, P, Q, B any, D dataer, Context any] func(EndpointInput[C, P, Q, B], Context) (DataResponse[D], error)
 
 type RouteDescription struct {
 	Title       string
@@ -311,15 +314,29 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 			params = append(params, pv)
 		}
 
-		bodyTypeNodeSchema := quick_schema.GetSchema[B]()
-		bodyRepo := buildSchemaRepo(*bodyTypeNodeSchema)
+		if swag.Components.Schemas == nil {
+			swag.Components.Schemas = openapi3.Schemas{}
+		}
 
-		reqContent := openapi3.NewContentWithJSONSchema(bodyRepo.Start)
-		reqContent["application/x-www-form-urlencoded"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
-		reqContent["multipart/form-data"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
-		requestBody := &openapi3.RequestBody{
-			Description: "Request data",
-			Content:     reqContent,
+		bodyTypeNodeSchema := quick_schema.GetSchema[B]()
+		var requestBody *openapi3.RequestBody
+		// ignore the request body if type is "any"
+		if bodyTypeNodeSchema != nil {
+			bodyRepo := buildSchemaRepo(*bodyTypeNodeSchema)
+
+			reqContent := openapi3.NewContentWithJSONSchema(bodyRepo.Start)
+			reqContent["application/x-www-form-urlencoded"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
+			reqContent["multipart/form-data"] = openapi3.NewMediaType().WithSchema(bodyRepo.Start)
+			requestBody = &openapi3.RequestBody{
+				Description: "Request data",
+				Content:     reqContent,
+			}
+			for n, val := range bodyRepo.Repo {
+				if val == nil {
+					panic("unexpected nil bodySchema")
+				}
+				swag.Components.Schemas[n] = openapi3.NewSchemaRef("", val)
+			}
 		}
 
 		responseNodeSchema := quick_schema.GetSchema[DataResponse[D]]()
@@ -339,16 +356,6 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 			Content:     openapi3.NewContentWithJSONSchema(responseRepo.Start),
 		}
 
-		if swag.Components.Schemas == nil {
-			swag.Components.Schemas = openapi3.Schemas{}
-		}
-
-		for n, val := range bodyRepo.Repo {
-			if val == nil {
-				panic("unexpected nil bodySchema")
-			}
-			swag.Components.Schemas[n] = openapi3.NewSchemaRef("", val)
-		}
 		for n, val := range responseRepo.Repo {
 			if val == nil {
 				panic("unexpected nil responseSchema")
@@ -360,10 +367,6 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 			Summary:     rdesc.Title,
 			Description: rdesc.Description,
 			Parameters:  params,
-			RequestBody: &openapi3.RequestBodyRef{
-				//Ref:   "#/components/requestBodies/someRequestBody",
-				Value: requestBody,
-			},
 			Responses: openapi3.Responses{
 				"200": &openapi3.ResponseRef{
 					//Ref:   "#/components/responses/someResponse",
@@ -371,6 +374,12 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 				},
 			},
 			Security: openapi3.NewSecurityRequirements().With(openapi3.NewSecurityRequirement().Authenticate("bearerAuth", "something else")),
+		}
+		if requestBody != nil {
+			op.RequestBody = &openapi3.RequestBodyRef{
+				//Ref:   "#/components/requestBodies/someRequestBody",
+				Value: requestBody,
+			}
 		}
 		if len(rdesc.Tag) > 0 {
 			op.Tags = []string{rdesc.Tag}

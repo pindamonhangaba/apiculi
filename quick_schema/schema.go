@@ -2,13 +2,19 @@ package quick_schema
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"unicode"
 )
 
+type Noder interface {
+	Node() *Node
+}
+
 var (
 	marshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+	noderType     = reflect.TypeOf((*Noder)(nil)).Elem()
 )
 
 type Node struct {
@@ -21,6 +27,15 @@ type Node struct {
 	Children    []Node
 }
 
+func noderEncoder(v reflect.Value) *Node {
+	m, ok := v.Interface().(Noder)
+	if !ok {
+		return nil
+	}
+
+	return m.Node()
+}
+
 func marshalerEncoder(v reflect.Value) Node {
 	result := ""
 	if v.Kind() == reflect.Pointer && v.IsNil() {
@@ -28,7 +43,7 @@ func marshalerEncoder(v reflect.Value) Node {
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
-			Format:  "any",
+			Format:  "object",
 		}
 	}
 	m, ok := v.Interface().(json.Marshaler)
@@ -37,7 +52,7 @@ func marshalerEncoder(v reflect.Value) Node {
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
-			Format:  "any",
+			Format:  "object",
 		}
 	}
 	b, err := m.MarshalJSON()
@@ -47,12 +62,12 @@ func marshalerEncoder(v reflect.Value) Node {
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
-			Format:  "any",
+			Format:  "object",
 		}
 	}
 	result = string(b)
 	isNullable := string(b) == "null"
-	if string(b) == "null" && v.Kind() == reflect.Struct {
+	if string(b) == "null" && v.Kind() == reflect.Struct && v.FieldByName("Valid").CanSet() {
 		v.FieldByName("Valid").Set(reflect.ValueOf(true))
 		m, ok := v.Interface().(json.Marshaler)
 		if !ok {
@@ -60,7 +75,7 @@ func marshalerEncoder(v reflect.Value) Node {
 			return Node{
 				Type:    v.Type().Name(),
 				Package: v.Type().PkgPath(),
-				Format:  "any",
+				Format:  "string",
 			}
 		}
 		b, err = m.MarshalJSON()
@@ -70,7 +85,7 @@ func marshalerEncoder(v reflect.Value) Node {
 			return Node{
 				Type:    v.Type().Name(),
 				Package: v.Type().PkgPath(),
-				Format:  "any",
+				Format:  "object",
 			}
 		}
 		result = string(b)
@@ -78,7 +93,7 @@ func marshalerEncoder(v reflect.Value) Node {
 	it := Node{
 		Type:    v.Type().Name(),
 		Package: v.Type().PkgPath(),
-		Format:  "any",
+		Format:  "object",
 	}
 	if strings.HasPrefix(result, "\"") && strings.HasSuffix(result, "\"") {
 		it.Format = "string"
@@ -146,6 +161,12 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			}
 		}
 	}()
+	if t.Implements(noderType) {
+		enc := noderEncoder(*f)
+		if enc != nil {
+			return enc
+		}
+	}
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Name() != reflect.String.String() {
@@ -187,7 +208,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 	case reflect.Array:
 		s1 := reflect.ArrayOf(1, t)
 		tt := s1.Elem().Elem()
-		fv := reflect.New(tt.Elem())
+		fv := reflect.New(tt)
 		e := fv.Elem()
 
 		items := []Node{}
@@ -243,30 +264,38 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			if jsontag == "-" {
 				continue
 			}
-			name, _ := parseTag(jsontag)
-			if !isValidTag(name) {
-				name = vv.Name
+			name := vv.Name
+			nmeth, err := getValueFromStringMethod(vv.Type, "Name")
+			if err == nil && isValidTag(nmeth) {
+				name = nmeth
+			}
+			n, _ := parseTag(jsontag)
+			if isValidTag(n) {
+				name = n
 			}
 
 			itm := schemaIt(vv.Type, &v)
-			if itm != nil {
-				if !val(itm.Name) {
-					itm.Name = name
+			if vv.Anonymous && vv.Type.Kind() == reflect.Struct {
+				items = append(items, itm.Children...)
+			} else {
+				if itm != nil {
+					if !val(itm.Name) {
+						itm.Name = name
+					}
+					d := strings.TrimSpace(vv.Tag.Get("description"))
+					if val(d) {
+						itm.Description = d
+					}
+					e := strings.TrimSpace(vv.Tag.Get("example"))
+					if val(e) {
+						itm.Example = e
+					}
+					f := strings.TrimSpace(vv.Tag.Get("format"))
+					if val(f) {
+						itm.Format = f
+					}
+					items = append(items, *itm)
 				}
-				items = append(items, *itm)
-			}
-
-			d := strings.TrimSpace(vv.Tag.Get("description"))
-			if val(d) {
-				itm.Description = d
-			}
-			e := strings.TrimSpace(vv.Tag.Get("example"))
-			if val(e) {
-				itm.Example = e
-			}
-			f := strings.TrimSpace(vv.Tag.Get("format"))
-			if val(f) {
-				itm.Format = f
 			}
 
 		}
@@ -337,4 +366,22 @@ func isValidTag(s string) bool {
 		}
 	}
 	return true
+}
+
+func getValueFromStringMethod(t reflect.Type, name string) (s string, err error) {
+	err = errors.New("no " + name + " method")
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.New("panic in " + name + " method")
+		}
+	}()
+	_, ok := t.MethodByName(name)
+	if ok {
+		res := reflect.Zero(t).MethodByName(name).Call([]reflect.Value{})
+		if str, ok := res[0].Interface().(string); ok {
+			return str, nil
+		}
+	}
+
+	return s, err
 }

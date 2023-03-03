@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/pindamonhangaba/apiculi/quick_schema"
 
@@ -232,7 +233,7 @@ func (op *OpenAPI) AddJWTBearerAuth(name string) *openapi3.T {
 func NewOpenAPI(title, version string) OpenAPI {
 	return OpenAPI{
 		t: openapi3.T{
-			OpenAPI: "3.0",
+			OpenAPI: "3.0.0",
 			Info: &openapi3.Info{
 				Title:   title,
 				Version: version,
@@ -255,8 +256,6 @@ func (g *OpenAPIRouteGroup) Route(title, description string) OpenAPIRouteDescrib
 		}, &g.op.t)
 	}
 }
-
-type endpointDescription [2]string
 
 type endpointPath struct {
 	verb httpVerb
@@ -366,6 +365,7 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 		op := &openapi3.Operation{
 			Summary:     rdesc.Title,
 			Description: rdesc.Description,
+			OperationID: toCamelCase(rdesc.Title),
 			Parameters:  params,
 			Responses: openapi3.Responses{
 				"200": &openapi3.ResponseRef{
@@ -536,4 +536,23 @@ func routerPathToOpenAPIPath(path string) string {
 		path = strings.Replace(path, m, "{"+strings.ReplaceAll(m, ":", "")+"}", 1)
 	}
 	return path
+}
+
+func toCamelCase(s string) string {
+	// Split the string into words
+	words := strings.FieldsFunc(s, func(c rune) bool {
+		return !unicode.IsLetter(c) && !unicode.IsNumber(c)
+	})
+
+	// Convert each word to title case
+	for i := 0; i < len(words); i++ {
+		words[i] = strings.Title(words[i])
+	}
+
+	// Combine the words and convert the first letter to lower case
+	result := strings.Join(words, "")
+	if len(result) > 0 {
+		result = strings.ToLower(result[:1]) + result[1:]
+	}
+	return result
 }

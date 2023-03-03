@@ -1,5 +1,3 @@
-# github.com/andreyvit/diff v0.0.0-20170406064948-c7f18ee00883
-## explicit
 # github.com/andybalholm/brotli v1.0.4
 ## explicit; go 1.12
 github.com/andybalholm/brotli
@@ -37,8 +35,9 @@ github.com/gofiber/fiber/v2/internal/msgp
 github.com/gofiber/fiber/v2/internal/schema
 github.com/gofiber/fiber/v2/internal/uuid
 github.com/gofiber/fiber/v2/utils
-# github.com/gofiber/jwt/v3 v3.2.8
-## explicit; go 1.15
+# github.com/gofrs/uuid v4.4.0+incompatible
+## explicit
+github.com/gofrs/uuid
 # github.com/golang-jwt/jwt v3.2.2+incompatible
 ## explicit
 github.com/golang-jwt/jwt
@@ -53,8 +52,6 @@ github.com/gorilla/mux
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/gzip
 github.com/klauspost/compress/zlib
-# github.com/labstack/echo v3.3.10+incompatible
-## explicit
 # github.com/labstack/echo/v4 v4.7.2
 ## explicit; go 1.17
 github.com/labstack/echo/v4
@@ -62,6 +59,11 @@ github.com/labstack/echo/v4
 ## explicit; go 1.12
 github.com/labstack/gommon/color
 github.com/labstack/gommon/log
+# github.com/lib/pq v1.10.7
+## explicit; go 1.13
+github.com/lib/pq
+github.com/lib/pq/oid
+github.com/lib/pq/scram
 # github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e
 ## explicit
 github.com/mailru/easyjson/buffer
@@ -73,6 +75,10 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.14
 ## explicit; go 1.12
 github.com/mattn/go-isatty
+# github.com/onsi/ginkgo v1.16.5
+## explicit; go 1.16
+# github.com/onsi/gomega v1.27.2
+## explicit; go 1.18
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
@@ -101,23 +107,25 @@ github.com/yudai/gojsondiff/formatter
 # github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82
 ## explicit
 github.com/yudai/golcs
+# github.com/yudai/pp v2.0.1+incompatible
+## explicit
 # golang.org/x/crypto v0.0.0-20220214200702-86341886e292
 ## explicit; go 1.17
 golang.org/x/crypto/acme
 golang.org/x/crypto/acme/autocert
-# golang.org/x/net v0.0.0-20220225172249-27dd8689420f
+# golang.org/x/net v0.7.0
 ## explicit; go 1.17
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/h2c
 golang.org/x/net/http2/hpack
 golang.org/x/net/idna
-# golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8
+# golang.org/x/sys v0.5.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.3.7
+# golang.org/x/text v0.7.0
 ## explicit; go 1.17
 golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
@@ -125,6 +133,7 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # gopkg.in/guregu/null.v3 v3.5.0
 ## explicit
+gopkg.in/guregu/null.v3
 # gopkg.in/yaml.v2 v2.3.0
 ## explicit
 gopkg.in/yaml.v2

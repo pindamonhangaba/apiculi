@@ -2,7 +2,6 @@ package quick_schema
 
 import (
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -76,6 +75,7 @@ func TestGetSchema(t *testing.T) {
 }
 
 func TestEmbededTypes(t *testing.T) {
+	expected := `{"Package":"github.com/pindamonhangaba/apiculi/quick_schema","Type":"B","Format":"object","Name":"","Description":"","Example":"","Children":[{"Package":"","Type":"string","Format":"string","Name":"FirstMe","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"","Type":"int64","Format":"number","Name":"NUmberSutff","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"","Type":"int32","Format":"number","Name":"FirstMe","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"time","Type":"Time","Format":"string","Name":"NOthingHere","Description":"","Example":"","Children":null,"Omitempty":false}],"Omitempty":false}`
 	type EMbedMe struct {
 		FirstMe     string
 		NUmberSutff int64
@@ -87,7 +87,17 @@ func TestEmbededTypes(t *testing.T) {
 	}
 	bodyTypeNodeSchema := GetSchema[B]()
 	b, err := json.Marshal(bodyTypeNodeSchema)
-	fmt.Println(string(b), err)
+	if err != nil {
+		t.Error(err)
+	}
+
+	d, err := diffJSON([]byte(expected), b)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", d)
+	}
 }
 
 type PushTokens struct {
@@ -96,15 +106,28 @@ type PushTokens struct {
 
 func TestComplexTypes(t *testing.T) {
 
+	expected := `{"Package":"github.com/pindamonhangaba/apiculi/quick_schema","Type":"B","Format":"object","Name":"","Description":"","Example":"","Children":[{"Package":"github.com/gofrs/uuid","Type":"string","Format":"string","Name":"acveID","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"github.com/gofrs/uuid","Type":"UUID","Format":"string","Name":"ID","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"time","Type":"Time","Format":"string","Name":"createdAt","Description":"","Example":"","Children":null,"Omitempty":false},{"Package":"","Type":"string","Format":"string","Name":"opt","Description":"","Example":"","Children":null,"Omitempty":true},{"Package":"github.com/lib/pq","Type":"StringArray","Format":"slice","Name":"PushTokens","Description":"","Example":"","Children":[{"Package":"","Type":"string","Format":"string","Name":"","Description":"","Example":"","Children":null,"Omitempty":false}],"Omitempty":false},{"Package":"","Type":"","Format":"slice","Name":"PushTokens2","Description":"","Example":"","Children":[{"Package":"","Type":"string","Format":"string","Name":"","Description":"","Example":"","Children":null,"Omitempty":false}],"Omitempty":false},{"Package":"","Type":"","Format":"slice","Name":"PushTokens3","Description":"","Example":"","Children":[{"Package":"","Type":"uint8","Format":"number","Name":"","Description":"","Example":"","Children":null,"Omitempty":false}],"Omitempty":false}],"Omitempty":false}`
+
 	type B struct {
-		AcveID      uuid.UUID `db:"acve_id" json:"acveID"`
+		AcveID      uuid.UUID `db:"acve_id" json:"acveID" type:"string"`
+		AnotherID   uuid.UUID `db:"id" json:"ID"`
 		CreatedAt   time.Time `db:"created_at" json:"createdAt"`
 		DeletedAt   null.Time `db:"deleted_at" json:"-"`
+		Optional    string    `json:"opt,omitempty"`
 		PushTokens  PushTokens
 		PushTokens2 []string
 		PushTokens3 []uint8
 	}
 	bodyTypeNodeSchema := GetSchema[B]()
 	b, err := json.Marshal(bodyTypeNodeSchema)
-	fmt.Println(string(b), err)
+	if err != nil {
+		t.Error(err)
+	}
+	d, err := diffJSON([]byte(expected), b)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", d)
+	}
 }

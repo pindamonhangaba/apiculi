@@ -25,6 +25,7 @@ type Node struct {
 	Description string
 	Example     string
 	Children    []Node
+	Omitempty   bool
 }
 
 func noderEncoder(v reflect.Value) *Node {
@@ -36,57 +37,55 @@ func noderEncoder(v reflect.Value) *Node {
 	return m.Node()
 }
 
-func marshalerEncoder(v reflect.Value) Node {
+func marshalerEncoder(v reflect.Value) (Node, error) {
 	result := ""
 	if v.Kind() == reflect.Pointer && v.IsNil() {
-		//e.WriteString("null")
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
 			Format:  "object",
-		}
+		}, errors.New("invalid 1")
 	}
 	m, ok := v.Interface().(json.Marshaler)
 	if !ok {
-		//e.WriteString("null")
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
 			Format:  "object",
-		}
+		}, errors.New("invalid 2")
 	}
 	b, err := m.MarshalJSON()
 	if err != nil {
-		// copy JSON into buffer, checking validity.
-		//err = compact(&e.Buffer, b, opts.escapeHTML)
 		return Node{
 			Type:    v.Type().Name(),
 			Package: v.Type().PkgPath(),
 			Format:  "object",
-		}
+		}, errors.New("invalid 3")
 	}
 	result = string(b)
 	isNullable := string(b) == "null"
-	if string(b) == "null" && v.Kind() == reflect.Struct && v.FieldByName("Valid").CanSet() {
-		v.FieldByName("Valid").Set(reflect.ValueOf(true))
+	if isNullable && v.Kind() == reflect.Struct {
+		if v.FieldByIndex([]int{0}).CanSet() && (v.FieldByIndex([]int{0}).Kind() == reflect.Array || v.FieldByIndex([]int{0}).Kind() == reflect.Slice) {
+			v.FieldByIndex([]int{0}).Set(reflect.MakeSlice(v.FieldByIndex([]int{0}).Type(), 1, 1))
+		}
+		if v.FieldByName("Valid").CanSet() {
+			v.FieldByName("Valid").Set(reflect.ValueOf(true))
+		}
 		m, ok := v.Interface().(json.Marshaler)
 		if !ok {
-			//e.WriteString("null")
 			return Node{
 				Type:    v.Type().Name(),
 				Package: v.Type().PkgPath(),
 				Format:  "string",
-			}
+			}, errors.New("invalid 4")
 		}
 		b, err = m.MarshalJSON()
 		if err != nil {
-			// copy JSON into buffer, checking validity.
-			//err = compact(&e.Buffer, b, opts.escapeHTML)
 			return Node{
 				Type:    v.Type().Name(),
 				Package: v.Type().PkgPath(),
 				Format:  "object",
-			}
+			}, errors.New("invalid 5")
 		}
 		result = string(b)
 	}
@@ -138,17 +137,16 @@ func marshalerEncoder(v reflect.Value) Node {
 			}
 		}
 	}
-
 	if isNullable {
 		return Node{
 			Type:     v.Type().Name(),
 			Package:  v.Type().PkgPath(),
 			Format:   "pointer",
 			Children: []Node{it},
-		}
+		}, nil
 	}
 
-	return it
+	return it, nil
 
 }
 
@@ -157,7 +155,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 		if r := recover(); r != nil {
 			d = &Node{
 				Type:   "panic",
-				Format: "any",
+				Format: "object",
 			}
 		}
 	}()
@@ -167,12 +165,13 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			return enc
 		}
 	}
+	typ := t.Name()
 	switch t.Kind() {
 	case reflect.Map:
 		if t.Key().Name() != reflect.String.String() {
 			return &Node{
 				Type:   "non-string-keys-map",
-				Format: "any",
+				Format: "object",
 			}
 		}
 		fv := reflect.New(t.Elem())
@@ -183,7 +182,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			items = append(items, *itm)
 		}
 		return &Node{
-			Type:     t.Name(),
+			Type:     typ,
 			Package:  t.PkgPath(),
 			Format:   "map",
 			Children: items,
@@ -200,9 +199,9 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			items = append(items, *itm)
 		}
 		return &Node{
-			Type:     t.Name(),
+			Type:     typ,
 			Package:  t.PkgPath(),
-			Format:   "array",
+			Format:   "slice",
 			Children: items,
 		}
 	case reflect.Array:
@@ -211,13 +210,22 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 		fv := reflect.New(tt)
 		e := fv.Elem()
 
+		// if array of uint8 we consider it as a string
+		if _, ok := e.Interface().(uint8); ok {
+			return &Node{
+				Type:    typ,
+				Package: t.PkgPath(),
+				Format:  "string",
+			}
+		}
+
 		items := []Node{}
 		itm := schemaIt(tt, &e)
 		if itm != nil {
 			items = append(items, *itm)
 		}
 		return &Node{
-			Type:     t.Name(),
+			Type:     typ,
 			Package:  t.PkgPath(),
 			Format:   "array",
 			Children: items,
@@ -231,7 +239,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			items = append(items, *itm)
 		}
 		return &Node{
-			Type:     t.Name(),
+			Type:     typ,
 			Package:  t.PkgPath(),
 			Format:   "pointer",
 			Children: items,
@@ -250,8 +258,10 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 		}
 	case reflect.Struct:
 		if t.Implements(marshalerType) {
-			enc := marshalerEncoder(*f)
-			return &enc
+			enc, err := marshalerEncoder(*f)
+			if err == nil {
+				return &enc
+			}
 		}
 		items := []Node{}
 		for i := 0; i < f.NumField(); i++ {
@@ -269,12 +279,16 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			if err == nil && isValidTag(nmeth) {
 				name = nmeth
 			}
-			n, _ := parseTag(jsontag)
+			n, extra := parseTag(jsontag)
 			if isValidTag(n) {
 				name = n
 			}
 
 			itm := schemaIt(vv.Type, &v)
+			itm.Omitempty = strings.TrimSpace(extra) == "omitempty"
+			if vv.Anonymous && vv.Type.Kind() == reflect.Slice && f.NumField() == 1 {
+				return itm
+			}
 			if vv.Anonymous && vv.Type.Kind() == reflect.Struct {
 				items = append(items, itm.Children...)
 			} else {
@@ -294,13 +308,18 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 					if val(f) {
 						itm.Format = f
 					}
+					typetag := strings.TrimSpace(vv.Tag.Get("type"))
+					typt, _ := parseTag(typetag)
+					if isValidTag(typt) {
+						itm.Type = typt
+					}
 					items = append(items, *itm)
 				}
 			}
 
 		}
 		return &Node{
-			Type:     t.Name(),
+			Type:     typ,
 			Package:  t.PkgPath(),
 			Format:   "object",
 			Children: items,
@@ -344,7 +363,7 @@ func GetSchema[T any]() *Node {
 
 func parseTag(tag string) (string, string) {
 	tag, opt, _ := strings.Cut(tag, ",")
-	return tag, (opt)
+	return tag, opt
 }
 
 func val(s string) bool {

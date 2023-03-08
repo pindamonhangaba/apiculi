@@ -43,10 +43,12 @@ func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, 
 	fillOpenAPIRoute[C, P, Q, B, D](p, d)
 
 	return string(p.verb), p.path, func(w http.ResponseWriter, req *http.Request) {
-		switch req.Header.Get("Content-Type") {
+
+		contt := req.Header.Get("Content-Type")
+		switch contt {
 		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
 		default:
-			writeErrJSON(w, http.StatusBadRequest, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`))
+			writeErrJSON(w, http.StatusBadRequest, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`, contt))
 			return
 		}
 

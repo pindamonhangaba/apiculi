@@ -10,6 +10,7 @@ import (
 	"github.com/yudai/gojsondiff/formatter"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/lib/pq"
 )
 
 type TT = EndpointInput[struct {
@@ -194,5 +195,46 @@ func TestFillOpenAPIRoute(t *testing.T) {
 	}
 	if len(d) > 0 {
 		t.Errorf("result not as expected:\n%v", "d")
+	}
+}
+
+type PushTokens struct {
+	pq.StringArray
+}
+
+func TestOptionalOmitempty(t *testing.T) {
+
+	expectedJSON := []byte(`{"schemas":{"github_com_pindamonhangaba_apiculi_endpoint":{"example":"","format":"param","properties":{"AnotherValue":{"example":"","items":{"example":"","format":"int","type":"number"},"title":"AnotherValue","type":"array"},"Props":{"example":"","format":"testParam","properties":{"ParamProp":{"example":"","format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"github_com_pindamonhangaba_apiculi_endpointProps","type":"object"},"PushTokens":{"example":"","format":"StringArray","items":{"example":"","format":"string","type":"string"},"title":"github_com_lib_pqPushTokens","type":"array"},"some_value":{"example":"","format":"string","nullable":true,"title":"some_value","type":"string"}},"required":["AnotherValue","Props","PushTokens"],"title":"github_com_pindamonhangaba_apiculi_endpoint","type":"object"},"github_com_pindamonhangaba_apiculi_endpointProps":{"example":"","format":"testParam","properties":{"ParamProp":{"example":"","format":"string","title":"ParamProp","type":"string"}},"required":["ParamProp"],"title":"github_com_pindamonhangaba_apiculi_endpointProps","type":"object"}}}`)
+
+	type testParam struct {
+		ParamProp string
+	}
+	type param struct {
+		SomeValue    string `json:"some_value,omitempty"`
+		AnotherValue []int
+		Props        testParam
+		PushTokens   PushTokens
+	}
+	n := quick_schema.GetSchema[param]()
+	repo := buildSchemaRepo(*n)
+	schemass := map[string]*openapi3.SchemaRef{}
+	for name, schema := range repo.Repo {
+		schemass[name] = &openapi3.SchemaRef{
+			Value: schema,
+		}
+	}
+	components := openapi3.Components{
+		Schemas: schemass,
+	}
+	j, err := components.MarshalJSON()
+	if err != nil {
+		t.Error(err)
+	}
+	d, err := diffJSON(expectedJSON, j)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(d) > 0 {
+		t.Errorf("result not as expected:\n%v", d)
 	}
 }

@@ -81,6 +81,7 @@ type SingleItemData[T any] struct {
 
 func (d SingleItemData[T]) data() {}
 
+/* example Schemaer
 func (d SingleItemData[T]) Schema() SchemaRepo {
 	s := quick_schema.GetSchema[SingleItemData[T]]()
 	r := buildSchemaRepo(*s)
@@ -110,6 +111,7 @@ func (d SingleItemData[T]) Schema() SchemaRepo {
 		Start: r.Start,
 	}
 }
+*/
 
 type CollectionItemData[T any] struct {
 	DataDetail
@@ -350,8 +352,9 @@ func fillOpenAPIRoute[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDe
 		// remove root schema ref name
 		responseRepo.Start.Format = ""
 
+		desc := "endpoint success responses"
 		response := &openapi3.Response{
-			Description: nil,
+			Description: &desc,
 			Content:     openapi3.NewContentWithJSONSchema(responseRepo.Start),
 		}
 
@@ -467,6 +470,7 @@ func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
 		s.Format = n.Type
 		s.Example = n.Example
 		s.Description = n.Description
+		s.Nullable = n.Omitempty
 
 		if s.Type == "object" {
 			s.Properties = make(openapi3.Schemas)
@@ -475,8 +479,11 @@ func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
 				ps := schemafy(p)
 				if p.Format == "pointer" && len(p.Children) == 1 {
 					ps = schemafy(p.Children[0])
+					ps.Nullable = true
 				} else {
-					s.Required = append(s.Required, p.Name)
+					if !p.Omitempty {
+						s.Required = append(s.Required, p.Name)
+					}
 				}
 				if ps.Format != "object" {
 					pname = ""
@@ -488,12 +495,15 @@ func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
 			if !ok {
 				repo[nname] = s
 			}
-		} else if s.Type == "array" && len(n.Children) == 1 {
+		} else if (s.Type == "array" || s.Type == "slice") && len(n.Children) == 1 {
+			s.Type = "array"
 			ps := schemafy(n.Children[0])
 			name := ""
-			if ps.Type == "object" || ps.Type == "array" {
-				name = "#/components/schemas/" +
-					makeRefableName(n.Children[0].Package, n.Children[0].Type, n.Children[0].Name)
+			if ps.Type == "object" || (s.Type == "array" || s.Type == "slice") {
+				name = makeRefableName(n.Children[0].Package, n.Children[0].Type, n.Children[0].Name)
+			}
+			if len(strings.TrimSpace(name)) > 0 {
+				name = "#/components/schemas/" + name
 			}
 			s.Items = openapi3.NewSchemaRef(name, ps)
 		}

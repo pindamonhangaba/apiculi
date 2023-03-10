@@ -71,11 +71,13 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, nex
 }
 
 func parseBodyEcho[C, P, Q, B any, D dataer](p endpointPath, c echo.Context) (cc C, prs P, q Q, b *B, err error) {
-	contt := c.Request().Header.Get("Content-Type")
-	switch contt {
-	case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
-	default:
-		return cc, prs, q, b, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`, contt)
+	if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
+		contt := c.Request().Header.Get("Content-Type")
+		switch contt {
+		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
+		default:
+			return cc, prs, q, b, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`, contt)
+		}
 	}
 
 	// ignore claims if type is "any"

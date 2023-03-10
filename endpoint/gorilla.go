@@ -44,12 +44,14 @@ func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, 
 
 	return string(p.verb), p.path, func(w http.ResponseWriter, req *http.Request) {
 
-		contt := req.Header.Get("Content-Type")
-		switch contt {
-		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
-		default:
-			writeErrJSON(w, http.StatusBadRequest, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`, contt))
-			return
+		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
+			contt := req.Header.Get("Content-Type")
+			switch contt {
+			case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
+			default:
+				writeErrJSON(w, http.StatusBadRequest, errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded"`, contt))
+				return
+			}
 		}
 
 		user := req.Context().Value("user").(*jwt.Token)

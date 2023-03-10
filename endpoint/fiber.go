@@ -1,6 +1,8 @@
 package endpoint
 
 import (
+	"net/http"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
@@ -15,11 +17,13 @@ func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, ne
 
 	return string(p.verb), p.path, func(c *fiber.Ctx) error {
 
-		contt := string(c.Request().Header.ContentType())
-		switch contt {
-		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
-		default:
-			return errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded" `, contt)
+		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
+			contt := string(c.Request().Header.ContentType())
+			switch contt {
+			case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
+			default:
+				return errors.Errorf(`unsupported content-type %s, must be "application/json" or "application/x-www-form-urlencoded" `, contt)
+			}
 		}
 
 		var cc C

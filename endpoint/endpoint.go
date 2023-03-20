@@ -233,6 +233,7 @@ func (op *OpenAPI) AddJWTBearerAuth(name string) *openapi3.T {
 }
 
 func NewOpenAPI(title, version string) OpenAPI {
+	comp := openapi3.NewComponents()
 	return OpenAPI{
 		t: openapi3.T{
 			OpenAPI: "3.0.0",
@@ -240,6 +241,7 @@ func NewOpenAPI(title, version string) OpenAPI {
 				Title:   title,
 				Version: version,
 			},
+			Components: &comp,
 		},
 	}
 }

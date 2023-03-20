@@ -52,6 +52,9 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, nex
 	return string(p.verb), p.path, func(c echo.Context) error {
 
 		cc, prs, q, b, err := parseBodyEcho[C, P, Q, B, D](p, c)
+		if err != nil {
+			return err
+		}
 
 		input := EndpointInput[C, P, Q, B]{
 			Claims: cc,

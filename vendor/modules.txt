@@ -4,8 +4,6 @@ github.com/andybalholm/brotli
 # github.com/getkin/kin-openapi v0.115.0
 ## explicit; go 1.16
 github.com/getkin/kin-openapi/openapi3
-# github.com/ghodss/yaml v1.0.0
-## explicit
 # github.com/go-openapi/jsonpointer v0.19.5
 ## explicit; go 1.13
 github.com/go-openapi/jsonpointer
@@ -36,9 +34,6 @@ github.com/gofiber/fiber/v2/utils
 # github.com/gofrs/uuid v4.4.0+incompatible
 ## explicit
 github.com/gofrs/uuid
-# github.com/golang-jwt/jwt v3.2.2+incompatible
-## explicit
-github.com/golang-jwt/jwt
 # github.com/golang-jwt/jwt/v4 v4.3.0
 ## explicit; go 1.15
 github.com/golang-jwt/jwt/v4

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/mux"
 	"github.com/pindamonhangaba/apiculi/quick_schema"
 	"github.com/pkg/errors"
@@ -45,7 +45,7 @@ func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, 
 	return string(p.verb), p.path, func(w http.ResponseWriter, req *http.Request) {
 
 		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
-			contt := req.Header.Get("Content-Type")
+			contt := strings.Split(req.Header.Get("Content-Type"), ";")[0]
 			switch contt {
 			case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
 			default:

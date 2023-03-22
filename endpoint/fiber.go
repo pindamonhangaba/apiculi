@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
@@ -18,7 +19,7 @@ func Fiber[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, ne
 	return string(p.verb), p.path, func(c *fiber.Ctx) error {
 
 		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
-			contt := string(c.Request().Header.ContentType())
+			contt := strings.Split(string(c.Request().Header.ContentType()), ";")[0]
 			switch contt {
 			case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
 			default:

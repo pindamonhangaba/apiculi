@@ -8,7 +8,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/pkg/errors"
 )
 
@@ -75,7 +75,7 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, nex
 
 func parseBodyEcho[C, P, Q, B any, D dataer](p endpointPath, c echo.Context) (cc C, prs P, q Q, b *B, err error) {
 	if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
-		contt := c.Request().Header.Get("Content-Type")
+		contt := strings.Split(c.Request().Header.Get("Content-Type"), ";")[0]
 		switch contt {
 		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":
 		default:

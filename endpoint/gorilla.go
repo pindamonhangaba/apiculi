@@ -71,11 +71,15 @@ func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, 
 			return
 		}
 
-		m = map[string]string{}
+		qMap := map[string]any{}
 		for k, v := range req.URL.Query() {
-			m[k] = strings.Join(v, ",")
+			if len(v) > 1 {
+				qMap[k] = v
+			} else if len(v) == 1 {
+				qMap[k] = v[0]
+			}
 		}
-		q, err := mapToStruct(m, *new(Q))
+		q, err := mapToStruct(qMap, *new(Q))
 		if err != nil {
 			writeErrJSON(w, http.StatusInternalServerError, err)
 			return

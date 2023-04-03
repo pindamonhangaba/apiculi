@@ -104,11 +104,15 @@ func parseBodyEcho[C, P, Q, B any, D dataer](p endpointPath, c echo.Context) (cc
 		return cc, prs, q, b, errors.Wrap(err, "params")
 	}
 
-	m = map[string]string{}
+	qMap := map[string]any{}
 	for k, v := range c.Request().URL.Query() {
-		m[k] = strings.Join(v, ",")
+		if len(v) > 1 {
+			qMap[k] = v
+		} else if len(v) == 1 {
+			qMap[k] = v[0]
+		}
 	}
-	q, err = mapToStruct(m, *new(Q))
+	q, err = mapToStruct(qMap, *new(Q))
 	if err != nil {
 		return cc, prs, q, b, errors.Wrap(err, "query")
 	}

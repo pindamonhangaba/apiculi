@@ -458,7 +458,23 @@ func makeParams[T any](in string) (map[string]*openapi3.ParameterRef, error) {
 }
 
 func makeRefableName(pkg, typ, name string) string {
-	return strings.ReplaceAll(strings.ReplaceAll(pkg, "/", "_"), ".", "_") + name
+	if pkg == "" {
+		return name
+	}
+	if pkg != "" && typ != "" {
+		return strings.Join(notempty([]string{strings.ReplaceAll(strings.ReplaceAll(pkg, "/", "_"), ".", "_"), typ}), "_")
+	}
+	return strings.Join(notempty([]string{strings.ReplaceAll(strings.ReplaceAll(pkg, "/", "_"), ".", "_"), typ, name}), "_")
+}
+
+func notempty(s []string) (res []string) {
+	for _, v := range s {
+		if v == "" {
+			continue
+		}
+		res = append(res, v)
+	}
+	return res
 }
 
 func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
@@ -477,7 +493,7 @@ func buildSchemaRepo(n quick_schema.Node) SchemaRepo {
 		if s.Type == "object" {
 			s.Properties = make(openapi3.Schemas)
 			for _, p := range n.Children {
-				pname := "#/components/schemas/" + makeRefableName(p.Package, p.Type, p.Name)
+				pname := "#/components/schemas/" + makeRefableName(p.Package, "", p.Name)
 				ps := schemafy(p)
 				if p.Format == "pointer" && len(p.Children) == 1 {
 					ps = schemafy(p.Children[0])

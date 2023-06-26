@@ -556,12 +556,9 @@ func validatePathParamVar(path, param string) error {
 // for extended options see: https://docs.gofiber.io/guide/routing#parameters
 func routerPathToOpenAPIPath(path string) string {
 	re := regexp.MustCompile(`(?m)[^\\](:[\w]+)`)
-	matches := re.FindStringSubmatch(path)
-	if len(matches) > 1 {
-		matches = matches[1:]
-	}
+	matches := re.FindAllString(path, -1)
 	for _, m := range matches {
-		path = strings.Replace(path, m, "{"+strings.ReplaceAll(m, ":", "")+"}", 1)
+		path = strings.Replace(path, m, "/{"+strings.ReplaceAll(m, "/:", "")+"}", 1)
 	}
 	return path
 }

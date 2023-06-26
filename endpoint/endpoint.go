@@ -563,7 +563,6 @@ func routerPathToOpenAPIPath(path string) string {
 	return path
 }
 
-
 func toCamelCase(s string) string {
 	// Split the string into words
 	words := strings.FieldsFunc(s, func(c rune) bool {

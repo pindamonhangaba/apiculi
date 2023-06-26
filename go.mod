@@ -6,7 +6,7 @@ require (
 	github.com/getkin/kin-openapi v0.115.0
 	github.com/gofiber/fiber/v2 v2.29.0
 	github.com/gofrs/uuid v4.4.0+incompatible
-	github.com/golang-jwt/jwt/v4 v4.3.0
+	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/gorilla/mux v1.8.0
 	github.com/labstack/echo/v4 v4.7.2
 	github.com/lib/pq v1.10.7

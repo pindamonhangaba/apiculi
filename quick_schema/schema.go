@@ -285,7 +285,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 			}
 
 			itm := schemaIt(vv.Type, &v)
-			itm.Omitempty = strings.TrimSpace(extra) == "omitempty"
+			itm.Omitempty = contains("omitempty", extra)
 			if vv.Anonymous && vv.Type.Kind() == reflect.Slice && f.NumField() == 1 {
 				return itm
 			}
@@ -361,9 +361,9 @@ func GetSchema[T any]() *Node {
 	return its
 }
 
-func parseTag(tag string) (string, string) {
+func parseTag(tag string) (string, []string) {
 	tag, opt, _ := strings.Cut(tag, ",")
-	return tag, opt
+	return tag, strings.Split(opt, ",")
 }
 
 func val(s string) bool {
@@ -403,4 +403,13 @@ func getValueFromStringMethod(t reflect.Type, name string) (s string, err error)
 	}
 
 	return s, err
+}
+
+func contains(s string, a []string) bool {
+	for _, k := range a {
+		if strings.TrimSpace(s) == strings.TrimSpace(k) {
+			return true
+		}
+	}
+	return false
 }

@@ -214,7 +214,7 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 		if _, ok := e.Interface().(uint8); ok {
 			return &Node{
 				Type:    typ,
-				Package: t.PkgPath(),
+				Package: "",
 				Format:  "string",
 			}
 		}

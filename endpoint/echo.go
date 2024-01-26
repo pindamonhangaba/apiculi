@@ -14,13 +14,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+type EchoSkipper func(c echo.Context) bool
+
 type echoOptions struct {
-	restoreBody bool
+	restoreBody     bool
+	responseSkipper *EchoSkipper
 }
 
 func WithRestoredBody() echoOptions {
 	return echoOptions{
 		restoreBody: true,
+	}
+}
+
+func WithEchoResponseSkipper(s EchoSkipper) echoOptions {
+	return echoOptions{
+		responseSkipper: &s,
 	}
 }
 
@@ -55,6 +64,56 @@ func EchoWithContext[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDes
 		r, err := next(input, c)
 		if err != nil {
 			return err
+		}
+		for _, opt := range opts {
+			if opt.responseSkipper != nil {
+				if (*opt.responseSkipper)(c) {
+					return nil
+				}
+			}
+		}
+		return c.JSON(http.StatusOK, r)
+	}
+}
+
+func EchoWithNoResponse[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, next EndpointWithContext[C, P, Q, B, D, echo.Context], opts ...echoOptions) (string, string, echo.HandlerFunc) {
+	fillOpenAPIRoute[C, P, Q, B, D](endpointPath{
+		verb: p.verb,
+		path: routerPathToOpenAPIPath(p.path),
+	}, d)
+
+	defaultOptions := echoOptions{}
+
+	for _, opt := range opts {
+		defaultOptions.restoreBody = opt.restoreBody
+	}
+
+	return string(p.verb), p.path, func(c echo.Context) error {
+
+		cc, prs, q, b, err := parseBodyEcho[C, P, Q, B, D](p, c, defaultOptions.restoreBody)
+		if err != nil {
+			return err
+		}
+
+		input := EndpointInput[C, P, Q, B]{
+			Claims: cc,
+			Params: prs,
+			Query:  q,
+		}
+		if b != nil {
+			input.Body = *b
+		}
+
+		r, err := next(input, c)
+		if err != nil {
+			return err
+		}
+		for _, opt := range opts {
+			if opt.responseSkipper != nil {
+				if (*opt.responseSkipper)(c) {
+					return nil
+				}
+			}
 		}
 		return c.JSON(http.StatusOK, r)
 	}

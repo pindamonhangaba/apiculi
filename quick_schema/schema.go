@@ -315,9 +315,10 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 					typt, _ := parseTag(typetag)
 					if isValidTag(typt) {
 						itm.Type = typt
-						if f == "-" {
+						if typt == "-" {
 							itm.Type = ""
 						}
+
 					}
 					items = append(items, *itm)
 				}

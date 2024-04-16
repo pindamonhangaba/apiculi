@@ -307,11 +307,17 @@ func schemaIt(t reflect.Type, f *reflect.Value) (d *Node) {
 					f := strings.TrimSpace(vv.Tag.Get("format"))
 					if val(f) {
 						itm.Format = f
+						if f == "-" {
+							itm.Format = ""
+						}
 					}
 					typetag := strings.TrimSpace(vv.Tag.Get("type"))
 					typt, _ := parseTag(typetag)
 					if isValidTag(typt) {
 						itm.Type = typt
+						if f == "-" {
+							itm.Type = ""
+						}
 					}
 					items = append(items, *itm)
 				}

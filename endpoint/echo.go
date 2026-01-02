@@ -151,7 +151,7 @@ func Echo[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, nex
 }
 
 func parseBodyEcho[C, P, Q, B any, D dataer](p endpointPath, c echo.Context, restoreBody bool) (cc C, prs P, q Q, b *B, err error) {
-	if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
+	if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions, http.MethodDelete}, string(p.verb)); !ok {
 		contt := strings.Split(c.Request().Header.Get("Content-Type"), ";")[0]
 		switch contt {
 		case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":

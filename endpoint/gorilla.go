@@ -44,7 +44,7 @@ func Gorilla[C, P, Q, B any, D dataer](p endpointPath, d OpenAPIRouteDescriber, 
 
 	return string(p.verb), p.path, func(w http.ResponseWriter, req *http.Request) {
 
-		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions}, string(p.verb)); !ok {
+		if _, ok := Find([]string{http.MethodGet, http.MethodConnect, http.MethodHead, http.MethodTrace, http.MethodOptions, http.MethodDelete}, string(p.verb)); !ok {
 			contt := strings.Split(req.Header.Get("Content-Type"), ";")[0]
 			switch contt {
 			case "application/json", "application/x-www-form-urlencoded", "multipart/form-data":

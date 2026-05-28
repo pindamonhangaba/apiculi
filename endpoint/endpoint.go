@@ -203,6 +203,19 @@ func (op *OpenAPI) RouteGroup(name string, description ...string) OpenAPIRouteGr
 	}
 }
 
+func (op *OpenAPI) CleanSchemas() *OpenAPI {
+	if op.t.Components == nil || op.t.Components.Schemas == nil {
+		return op
+	}
+	for name := range op.t.Components.Schemas {
+		if strings.TrimSpace(name) == "" {
+			delete(op.t.Components.Schemas, name)
+		}
+	}
+
+	return op
+}
+
 func (op *OpenAPI) T() *openapi3.T {
 	return &op.t
 }
